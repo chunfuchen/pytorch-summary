@@ -27,55 +27,66 @@ def summary(model, input_size):
                     summary[m_key]['trainable'] = module.weight.requires_grad
                 if hasattr(module, 'bias') and hasattr(module.bias, 'size'):
                     params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
+
                 summary[m_key]['nb_params'] = params
-                
-            if (not isinstance(module, nn.Sequential) and 
-               not isinstance(module, nn.ModuleList) and 
+
+                if hasattr(module, 'kernel_size') and hasattr(module, 'out_channels') and hasattr(module, 'in_channels'):
+                    summary[m_key]['flops'] = torch.div(torch.prod(torch.LongTensor(summary[m_key]['output_shape'][1:])) * module.kernel_size[0] * module.kernel_size[1] * module.in_channels, module.groups)
+                else:
+                    summary[m_key]['flops'] = 0
+
+            if (not isinstance(module, nn.Sequential) and
+               not isinstance(module, nn.ModuleList) and
                not (module == model)):
                 hooks.append(module.register_forward_hook(hook))
-                
+
         if torch.cuda.is_available():
             dtype = torch.cuda.FloatTensor
         else:
             dtype = torch.FloatTensor
-        
+
         # check if there are multiple inputs to the network
         if isinstance(input_size[0], (list, tuple)):
             x = [Variable(torch.rand(2,*in_size)).type(dtype) for in_size in input_size]
         else:
             x = Variable(torch.rand(2,*input_size)).type(dtype)
-            
-            
-        # print(type(x[0]))
+
+
         # create properties
         summary = OrderedDict()
         hooks = []
         # register hook
         model.apply(register_hook)
         # make a forward pass
-        # print(x.shape)
         model(x)
         # remove these hooks
         for h in hooks:
             h.remove()
 
-        print('----------------------------------------------------------------')
-        line_new = '{:>20}  {:>25} {:>15}'.format('Layer (type)', 'Output Shape', 'Param #')
-        print(line_new)
-        print('================================================================')
+
+        ret = ""
+        ret += '-----------------------------------------------------------------------------------\n'
+        line_new = '{:>24}  {:>25} {:>15} {:>15}\n'.format('Layer (type)', 'Output Shape', 'Param #', 'FLOPs #')
+        ret += line_new
+        ret += '===================================================================================\n'
         total_params = 0
         trainable_params = 0
+        total_flops = 0
         for layer in summary:
+
             # input_shape, output_shape, trainable, nb_params
-            line_new = '{:>20}  {:>25} {:>15}'.format(layer, str(summary[layer]['output_shape']), '{0:,}'.format(summary[layer]['nb_params']))
+            line_new = '{:>24}  {:>25} {:>15} {:>15}\n'.format(layer, str(summary[layer]['output_shape']), '{0:,}'.format(summary[layer]['nb_params']), '{0:,}'.format(summary[layer]['flops']))
             total_params += summary[layer]['nb_params']
+            total_flops += summary[layer]['flops']
             if 'trainable' in summary[layer]:
                 if summary[layer]['trainable'] == True:
                     trainable_params += summary[layer]['nb_params']
-            print(line_new)
-        print('================================================================')
-        print('Total params: {0:,}'.format(total_params))
-        print('Trainable params: {0:,}'.format(trainable_params))
-        print('Non-trainable params: {0:,}'.format(total_params - trainable_params))
-        print('----------------------------------------------------------------')
+            ret += line_new
+        ret += '===================================================================================\n'
+        ret += 'Total flops: {0:,}\n'.format(total_flops)
+        ret += 'Total params: {0:,}\n'.format(total_params)
+        ret += 'Trainable params: {0:,}\n'.format(trainable_params)
+        ret += 'Non-trainable params: {0:,}\n'.format(total_params - trainable_params)
+        ret += '-----------------------------------------------------------------------------------'
+        return ret
         # return summary
