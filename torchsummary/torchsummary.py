@@ -14,6 +14,7 @@ def summary(model, input_size):
                 m_key = '%s-%i' % (class_name, module_idx+1)
                 summary[m_key] = OrderedDict()
                 summary[m_key]['input_shape'] = list(input[0].size())
+                batch_size = summary[m_key]['input_shape'][0]
                 summary[m_key]['input_shape'][0] = -1
                 if isinstance(output, (list,tuple)):
                     summary[m_key]['output_shape'] = [[-1] + list(o.size())[1:] for o in output]
@@ -34,12 +35,14 @@ def summary(model, input_size):
                     summary[m_key]['flops'] = torch.div(torch.prod(torch.LongTensor(summary[m_key]['output_shape'][1:])) * module.kernel_size[0] * module.kernel_size[1] * module.in_channels, module.groups)
                 else:
                     summary[m_key]['flops'] = 0
+                summary[m_key]['flops'] *= batch_size
 
             if (not isinstance(module, nn.Sequential) and
                not isinstance(module, nn.ModuleList) and
                not (module == model)):
                 hooks.append(module.register_forward_hook(hook))
 
+        model.eval()
         if torch.cuda.is_available():
             dtype = torch.cuda.FloatTensor
         else:
@@ -47,10 +50,9 @@ def summary(model, input_size):
 
         # check if there are multiple inputs to the network
         if isinstance(input_size[0], (list, tuple)):
-            x = [Variable(torch.rand(2,*in_size)).type(dtype) for in_size in input_size]
+            x = [Variable(torch.rand(1,*in_size)).type(dtype) for in_size in input_size]
         else:
-            x = Variable(torch.rand(2,*input_size)).type(dtype)
-
+            x = Variable(torch.rand(1,*input_size)).type(dtype)
 
         # create properties
         summary = OrderedDict()
