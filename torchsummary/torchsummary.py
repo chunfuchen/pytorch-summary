@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-
+import numpy as np
 from collections import OrderedDict
 
 
@@ -27,12 +27,14 @@ def summary(model, input_size):
                     params += torch.prod(torch.LongTensor(list(module.weight.size())))
                     summary[m_key]['trainable'] = module.weight.requires_grad
                 if hasattr(module, 'bias') and hasattr(module.bias, 'size'):
-                    params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
+                    params += torch.prod(torch.LongTensor(list(module.bias.size())))
 
                 summary[m_key]['nb_params'] = params
 
                 if hasattr(module, 'kernel_size') and hasattr(module, 'out_channels') and hasattr(module, 'in_channels'):
-                    summary[m_key]['flops'] = torch.div(torch.prod(torch.LongTensor(summary[m_key]['output_shape'][1:])) * module.kernel_size[0] * module.kernel_size[1] * module.in_channels, module.groups)
+                    output_size = torch.prod(torch.LongTensor(summary[m_key]['output_shape'][1:]))
+                    flops_per_point = torch.div(np.prod(module.kernel_size) * module.in_channels, module.groups)
+                    summary[m_key]['flops'] = int(output_size * flops_per_point)
                 else:
                     summary[m_key]['flops'] = 0
                 summary[m_key]['flops'] *= batch_size
@@ -65,7 +67,6 @@ def summary(model, input_size):
         for h in hooks:
             h.remove()
 
-
         ret = ""
         ret += '-----------------------------------------------------------------------------------\n'
         line_new = '{:>24}  {:>25} {:>15} {:>15}\n'.format('Layer (type)', 'Output Shape', 'Param #', 'FLOPs #')
@@ -92,3 +93,4 @@ def summary(model, input_size):
         ret += '-----------------------------------------------------------------------------------'
         return ret
         # return summary
+
